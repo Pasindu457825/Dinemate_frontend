@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardHeader, CardBody, Typography, Avatar } from "@material-tailwind/react";
+import {
+  Card,
+  CardHeader,
+  CardBody,
+  Typography,
+  Avatar,
+} from "@material-tailwind/react";
 import api from "../../../../api"; // uses VITE_API_BASE_URL
 
 const RestaurantsList = () => {
@@ -16,14 +22,31 @@ const RestaurantsList = () => {
         setLoading(true);
         setError("");
 
-        // If your backend has TWO variants, pick ONE:
-        // 1) All restaurants:
-        // const { data } = await api.get("/api/ITPM/restaurants");
+        // Try the primary endpoint; fall back to the other if needed
+        let res;
+        try {
+          res = await api.get("/api/ITPM/restaurants/get-all-restaurants");
+        } catch (e) {
+          // fallback to older route
+          res = await api.get("/api/ITPM/restaurants");
+        }
 
-        // 2) Specific route used in your app:
-        const { data } = await api.get("/api/ITPM/restaurants/get-all-restaurants");
+        const raw = res?.data;
 
-        const enabled = Array.isArray(data) ? data.filter((r) => r?.isEnabled) : [];
+        // Normalize possible shapes to an array
+        const list =
+          (Array.isArray(raw) && raw) ||
+          raw?.restaurants ||
+          raw?.data ||
+          raw?.result ||
+          raw?.items ||
+          [];
+
+        // If your schema doesn't have isEnabled, treat missing as enabled
+        const enabled = list.filter((r) =>
+          typeof r?.isEnabled === "boolean" ? r.isEnabled : true
+        );
+
         setRestaurants(enabled);
       } catch (err) {
         console.error("Error fetching restaurants:", {
@@ -68,7 +91,11 @@ const RestaurantsList = () => {
         <div className="absolute inset-0 h-full w-full bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
       </CardHeader>
       <CardBody className="relative py-14 px-6 md:px-12">
-        <Typography variant="h3" color="white" className="mb-2 font-semibold leading-snug">
+        <Typography
+          variant="h3"
+          color="white"
+          className="mb-2 font-semibold leading-snug"
+        >
           {title}
         </Typography>
         {/* Material Tailwind does not have 'h7' — use 'lead' or 'paragraph' */}
@@ -135,7 +162,9 @@ const RestaurantsList = () => {
                 restaurant.image ||
                 "https://images.unsplash.com/photo-1633332755192-727a05c4013d?auto=format&fit=crop&w=1480&q=80"
               }
-              onClick={() => navigate(`/user/restaurent-details/${restaurant._id}`)}
+              onClick={() =>
+                navigate(`/user/restaurent-details/${restaurant._id}`)
+              }
             />
           ))}
         </div>
