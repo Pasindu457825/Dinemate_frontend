@@ -21,14 +21,15 @@ const LoginPage = () => {
     setSuccess("");
 
     try {
-      // If your backend expects { email, pwd }, rename below:
-      // const payload = { email: formData.email, pwd: formData.password };
-      // inside handleSubmit try { ... }
       const payload = { email: formData.email, password: formData.password };
-      const res = await api.post("/api/ITPM/users/login", payload);
-      const data = res?.data || {};
+      console.log("➡️ Sending login payload:", payload); // DEBUG
 
-      // try all common locations for token, role, userId
+      const res = await api.post("/api/ITPM/users/login", payload);
+      console.log("✅ Response from backend:", res); // DEBUG
+
+      const data = res?.data || {};
+      console.log("📦 Parsed data:", data); // DEBUG
+
       const token = data.token ?? data.accessToken ?? data.jwt;
       const roleRaw =
         data.role ??
@@ -40,31 +41,24 @@ const LoginPage = () => {
         data.userId ?? data.user?.id ?? data.user?._id ?? data.data?.user?._id;
 
       if (!token) throw new Error("No token returned from server");
-
       localStorage.setItem("token", token);
       if (roleRaw) localStorage.setItem("role", roleRaw);
       if (userId) localStorage.setItem("userId", userId);
 
-      // normalize role and route
       const role = String(roleRaw || "").toLowerCase();
+      console.log("👤 Detected role:", role);
 
       if (role === "restaurant_manager" || role === "manager") {
         navigate("/managers", { replace: true });
       } else if (role === "admin") {
         navigate("/admindashboard", { replace: true });
       } else {
-        // fallback: go home
         navigate("/", { replace: true });
       }
 
       setSuccess("Login successful — redirecting…");
     } catch (err) {
-      console.error("Login error:", {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-        url: (err.config?.baseURL || "") + (err.config?.url || ""),
-      });
+      console.error("❌ Login error:", err);
       setError(
         err.response?.data?.message ||
           "Invalid email or password. Please try again."

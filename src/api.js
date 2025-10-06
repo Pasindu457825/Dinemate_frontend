@@ -2,16 +2,13 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_BASE_URL || "http://localhost:5000",
-  withCredentials: false, // set true ONLY if using cookies
+  baseURL: process.env.REACT_APP_API_BASE_URL || "https://dinemate-backend.onrender.com", 
+  withCredentials: false,
 });
 
-// ✅ Attach token automatically
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
