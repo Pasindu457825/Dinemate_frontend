@@ -21,7 +21,7 @@ const LoginPage = () => {
     setSuccess("");
 
     try {
-      const payload = { email: formData.email, password: formData.password };
+      const payload = { email: formData.email, pwd: formData.password };
       console.log("➡️ Sending login payload:", payload); // DEBUG
 
       const res = await api.post("/api/ITPM/users/login", payload);
