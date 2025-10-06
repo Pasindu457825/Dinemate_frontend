@@ -23,22 +23,41 @@ const LoginPage = () => {
     try {
       // If your backend expects { email, pwd }, rename below:
       // const payload = { email: formData.email, pwd: formData.password };
+      // inside handleSubmit try { ... }
       const payload = { email: formData.email, password: formData.password };
+      const res = await api.post("/api/ITPM/users/login", payload);
+      const data = res?.data || {};
 
-      const { data } = await api.post("/api/ITPM/users/login", payload);
+      // try all common locations for token, role, userId
+      const token = data.token ?? data.accessToken ?? data.jwt;
+      const roleRaw =
+        data.role ??
+        data.user?.role ??
+        data.user?.userRole ??
+        data.data?.user?.role ??
+        data.data?.role;
+      const userId =
+        data.userId ?? data.user?.id ?? data.user?._id ?? data.data?.user?._id;
 
-      const { token, role, userId } = data || {};
+      if (!token) throw new Error("No token returned from server");
+
       localStorage.setItem("token", token);
-      localStorage.setItem("role", role);
-      localStorage.setItem("userId", userId);
+      if (roleRaw) localStorage.setItem("role", roleRaw);
+      if (userId) localStorage.setItem("userId", userId);
+
+      // normalize role and route
+      const role = String(roleRaw || "").toLowerCase();
+
+      if (role === "restaurant_manager" || role === "manager") {
+        navigate("/managers", { replace: true });
+      } else if (role === "admin") {
+        navigate("/admindashboard", { replace: true });
+      } else {
+        // fallback: go home
+        navigate("/", { replace: true });
+      }
 
       setSuccess("Login successful — redirecting…");
-
-      setTimeout(() => {
-        if (role === "restaurant_manager") navigate("/managers");
-        else if (role === "admin") navigate("/admindashboard");
-        else navigate("/");
-      }, 1500);
     } catch (err) {
       console.error("Login error:", {
         message: err.message,
@@ -46,7 +65,10 @@ const LoginPage = () => {
         data: err.response?.data,
         url: (err.config?.baseURL || "") + (err.config?.url || ""),
       });
-      setError(err.response?.data?.message || "Invalid email or password. Please try again.");
+      setError(
+        err.response?.data?.message ||
+          "Invalid email or password. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -57,16 +79,24 @@ const LoginPage = () => {
       <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-lg">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-800">Welcome Back</h1>
-          <p className="mt-2 text-gray-600">Sign in to your restaurant account</p>
+          <p className="mt-2 text-gray-600">
+            Sign in to your restaurant account
+          </p>
         </div>
 
         {error && (
-          <div id="error-banner" className="p-3 text-sm text-red-700 bg-red-100 rounded-md">
+          <div
+            id="error-banner"
+            className="p-3 text-sm text-red-700 bg-red-100 rounded-md"
+          >
             {error}
           </div>
         )}
         {success && (
-          <div id="success-banner" className="p-3 text-sm text-green-800 bg-green-100 rounded-md">
+          <div
+            id="success-banner"
+            className="p-3 text-sm text-green-800 bg-green-100 rounded-md"
+          >
             {success}
           </div>
         )}
@@ -74,7 +104,10 @@ const LoginPage = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Email Address
               </label>
               <input
@@ -91,16 +124,22 @@ const LoginPage = () => {
 
             <div>
               <div className="flex items-center justify-between">
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Password
                 </label>
-                <a href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
+                <a
+                  href="/forgot-password"
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
                   Forgot password?
                 </a>
               </div>
               <input
                 id="password"
-                name="password"            // change to "pwd" only if your API requires it
+                name="password" // change to "pwd" only if your API requires it
                 type="password"
                 required
                 value={formData.password}
@@ -121,7 +160,15 @@ const LoginPage = () => {
             {isLoading ? (
               <span className="flex items-center">
                 <svg className="w-5 h-5 mr-3 animate-spin" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
                   <path
                     className="opacity-75"
                     fill="currentColor"
@@ -139,7 +186,10 @@ const LoginPage = () => {
         <div className="text-center mt-4">
           <p className="text-sm text-gray-600">
             Don't have an account?{" "}
-            <a href="/signup/user" className="text-blue-600 hover:text-blue-800">
+            <a
+              href="/signup/user"
+              className="text-blue-600 hover:text-blue-800"
+            >
               Create an account
             </a>
           </p>
