@@ -2,11 +2,11 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5000",
-  withCredentials: false, // change to true ONLY if using cookies
+  baseURL: process.env.REACT_APP_API_URL, // ✅ fallback for dev
+  withCredentials: false, // set to true ONLY if backend uses cookies
 });
 
-// ✅ Attach token automatically to all requests
+// ✅ Automatically attach token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
