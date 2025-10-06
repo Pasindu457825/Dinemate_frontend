@@ -1,14 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import axios from "axios";
 import CartSidebar from "../order/CartPage";
 import {
-  Card,
-  CardHeader,
-  CardBody,
-  CardFooter,
-  Typography,
-  Button,
+  Card, CardHeader, CardBody, CardFooter, Typography, Button,
 } from "@material-tailwind/react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faShoppingCart } from "@fortawesome/free-solid-svg-icons";
@@ -16,58 +10,75 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Swal from "sweetalert2";
+import api from "../../../../api"; // ✅ use the configured axios instance
 
 const RestaurantDetails = () => {
   const { id: restaurantId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const { reservationId } = location.state || {};
+
   const [restaurant, setRestaurant] = useState(null);
   const [foods, setFoods] = useState([]);
-  const [cart, setCart] = useState([]);
-  const [cartOpen, setCartOpen] = useState(false);
-  const [quantities, setQuantities] = useState({});
-  const [searchQuery, setSearchQuery] = useState("");
-  const [orderType, setOrderType] = useState(""); // Track order type
-  const navigate = useNavigate(); // Initialize navigate function
-  const [selectedPortionSizes, setSelectedPortionSizes] = useState({});
-
-  const location = useLocation(); // ✅ Add useLocation()
   const [categorizedFoods, setCategorizedFoods] = useState({});
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  // Retrieve reservationId from state
-  const { reservationId } = location.state || {};
+  const [cart, setCart] = useState([]);
+  const [cartOpen, setCartOpen] = useState(false);
 
+  const [quantities, setQuantities] = useState({});
+  const [selectedPortionSizes, setSelectedPortionSizes] = useState({});
+  const [orderType, setOrderType] = useState("");
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  // Load cart once
   useEffect(() => {
-    const storedCart = JSON.parse(localStorage.getItem("cart")) || [];
-    setCart(storedCart);
+    setCart(JSON.parse(localStorage.getItem("cart")) || []);
   }, []);
 
+  // Fetch restaurant + foods
   useEffect(() => {
     const fetchRestaurantAndFoods = async () => {
       try {
-        const restaurantResponse = await axios.get(
-          `http://localhost:5000/api/ITPM/restaurants/get-restaurant/${restaurantId}`
-        );
-        const foodsResponse = await axios.get(
-          `http://localhost:5000/api/ITPM/foodItems/restaurant/foods/${restaurantId}`
-        );
+        setLoading(true);
 
-        setRestaurant(restaurantResponse.data);
+        const [restaurantRes, foodsRes] = await Promise.all([
+          api.get(`/api/ITPM/restaurants/get-restaurant/${restaurantId}`),
+          api.get(`/api/ITPM/foodItems/restaurant/foods/${restaurantId}`),
+        ]);
 
-        const foods = foodsResponse.data.foods || [];
-        setFoods(foods);
+        setRestaurant(restaurantRes.data);
 
-        // Categorize foods
-        const categorized = {};
-        foods.forEach((food) => {
-          if (!categorized[food.category]) {
-            categorized[food.category] = [];
-          }
-          categorized[food.category].push(food);
-        });
+        // Normalize foods payload
+        const list =
+          (Array.isArray(foodsRes.data) && foodsRes.data) ||
+          foodsRes.data?.foods ||
+          foodsRes.data?.data ||
+          foodsRes.data?.items ||
+          [];
 
-        setCategorizedFoods(categorized);
+        setFoods(list);
+
+        // Build categories
+        const byCat = list.reduce((acc, f) => {
+          const key = (f.category || "Uncategorized").trim();
+          acc[key] = acc[key] || [];
+          acc[key].push(f);
+          return acc;
+        }, {});
+        setCategorizedFoods(byCat);
       } catch (error) {
-        console.error("Error fetching data:", error);
+        console.error("Error fetching data:", {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+        toast.error("Failed to load restaurant or menu.");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -75,9 +86,9 @@ const RestaurantDetails = () => {
   }, [restaurantId]);
 
   const handleQuantityChange = (foodId, increment) => {
-    setQuantities((prevQuantities) => ({
-      ...prevQuantities,
-      [foodId]: Math.max(1, (prevQuantities[foodId] || 1) + increment),
+    setQuantities((prev) => ({
+      ...prev,
+      [foodId]: Math.max(1, (prev[foodId] || 1) + increment),
     }));
   };
 
@@ -87,7 +98,7 @@ const RestaurantDetails = () => {
       return;
     }
 
-    if (food.availability !== "Available") {
+    if (food.availability && food.availability !== "Available") {
       toast.error("❌ This item is currently unavailable.");
       return;
     }
@@ -99,22 +110,17 @@ const RestaurantDetails = () => {
 
     let storedCart = JSON.parse(localStorage.getItem("cart")) || [];
 
-    // ✅ Define this helper function inside
     const addItemToCart = () => {
-      const existingItemIndex = storedCart.findIndex(
-        (item) => item._id === food._id && item.portionSize === portionSize
+      const idx = storedCart.findIndex(
+        (i) => i._id === food._id && i.portionSize === portionSize
       );
-
-      let updatedCart;
-
-      if (existingItemIndex !== -1) {
-        updatedCart = storedCart.map((item, index) =>
-          index === existingItemIndex
-            ? { ...item, quantity: item.quantity + quantity }
-            : item
+      let updated;
+      if (idx !== -1) {
+        updated = storedCart.map((i, k) =>
+          k === idx ? { ...i, quantity: i.quantity + quantity } : i
         );
       } else {
-        updatedCart = [
+        updated = [
           ...storedCart,
           {
             ...food,
@@ -126,16 +132,16 @@ const RestaurantDetails = () => {
           },
         ];
       }
-
-      setCart(updatedCart);
-      localStorage.setItem("cart", JSON.stringify(updatedCart));
+      setCart(updated);
+      localStorage.setItem("cart", JSON.stringify(updated));
       toast.success(`✅ Added "${food.name}" (${portionSize}) to the cart!`);
     };
 
     if (storedCart.length > 0 && storedCart[0].restaurantId !== restaurantId) {
       Swal.fire({
         title: "Switch Restaurant?",
-        text: "You already have items from another restaurant. Do you want to clear the cart and add items from this one?",
+        text:
+          "You already have items from another restaurant. Clear the cart and add items from this one?",
         icon: "warning",
         showDenyButton: true,
         confirmButtonColor: "#d33",
@@ -148,9 +154,8 @@ const RestaurantDetails = () => {
           setCart([]);
           localStorage.setItem("cart", JSON.stringify([]));
           toast.info("Cart cleared, adding new items.");
-
-          addItemToCart(); // ✅ Add after confirmation
-        } else if (result.isDenied) {
+          addItemToCart();
+        } else {
           Swal.fire({
             icon: "info",
             title: "Action Cancelled",
@@ -160,59 +165,50 @@ const RestaurantDetails = () => {
           });
         }
       });
-
-      return; // Stop further execution until user responds
+      return;
     }
 
-    // ✅ No conflict — add directly
     addItemToCart();
   };
 
-  if (!restaurant)
-    return <p className="text-center text-gray-500">Loading...</p>;
+  if (loading) return <p className="text-center text-gray-500">Loading...</p>;
+  if (!restaurant) return <p className="text-center text-gray-500">Not found</p>;
 
   return (
     <>
       <div className="bg-gray-200 p-4">
         <div className="flex flex-col md:flex-row gap-8">
-          {/* Left Side: Restaurant Details */}
+          {/* Left: Restaurant Details */}
           <div className="md:w-1/5 bg-white shadow-2xl rounded-2xl p-6 flex flex-col items-start self-start">
-            {/* Restaurant Name */}
-            <h1 className="text-4xl font-bold text-gray-800 mb-4">
-              {restaurant.name}
-            </h1>
+            <h1 className="text-4xl font-bold text-gray-800 mb-4">{restaurant.name}</h1>
 
-            {/* Restaurant Image */}
             <img
               src={restaurant.image || "https://via.placeholder.com/600"}
               alt={restaurant.name}
+              onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/600")}
               className="w-full h-64 object-cover rounded-xl shadow-lg"
             />
 
-            {/* Content Section */}
             <div className="mt-6 w-full space-y-4">
-              {restaurant.description && (
-                <p className="text-gray-700 text-md leading-relaxed">
-                  {restaurant.description}
-                </p>
+              {!!restaurant.description && (
+                <p className="text-gray-700 text-md leading-relaxed">{restaurant.description}</p>
               )}
-              {restaurant.location && (
+              {!!restaurant.location && (
                 <p className="text-lg text-gray-700 font-medium flex items-start">
                   <span className="text-pink-600 text-xl mr-2">📍</span>
-                  <strong>Location:</strong>{" "}
+                  <strong>Location:</strong>
                   <span className="ml-1 flex-1">{restaurant.location}</span>
                 </p>
               )}
-              {restaurant.phoneNumber && (
+              {!!restaurant.phoneNumber && (
                 <p className="text-lg text-gray-700 font-medium flex items-start">
                   <span className="text-pink-600 text-xl mr-2">☎️</span>
-                  <strong>Phone:</strong>{" "}
+                  <strong>Phone:</strong>
                   <span className="ml-1 flex-1">{restaurant.phoneNumber}</span>
                 </p>
               )}
             </div>
 
-            {/* Make a Reservation Button */}
             <button
               onClick={() =>
                 navigate(`/add-reservation/${restaurantId}`, {
@@ -229,7 +225,6 @@ const RestaurantDetails = () => {
               📅 Book Table
             </button>
 
-            {/* Reservation ID Display */}
             {reservationId && (
               <p className="text-lg font-semibold text-amber-700 mt-4 bg-amber-100 py-2 px-4 rounded-lg shadow-md">
                 ✅ Your Reservation ID: {reservationId}
@@ -237,41 +232,33 @@ const RestaurantDetails = () => {
             )}
           </div>
 
-          {/* Right Side: Food Menu */}
+          {/* Right: Menu */}
           <div className="md:w-5/6 relative min-h-screen">
-            <div className="fixed top-4 right-4 z-50">
-              {!cartOpen && ( // ✅ Hide when cart is open
-                <div className="fixed top-[90px] right-4 z-50">
-                  <button
-                    onClick={() => setCartOpen(true)}
-                    className="bg-amber-700 text-black w-12 h-12 flex items-center justify-center text-sm font-semibold rounded-full shadow-lg hover:bg-amber-900 transition border border-white"
-                  >
-                    <FontAwesomeIcon
-                      icon={faShoppingCart}
-                      className="text-black w-5 h-5"
-                    />
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Cart button */}
+            {!cartOpen && (
+              <div className="fixed top-[90px] right-4 z-50">
+                <button
+                  onClick={() => setCartOpen(true)}
+                  className="bg-amber-700 text-black w-12 h-12 flex items-center justify-center text-sm font-semibold rounded-full shadow-lg hover:bg-amber-900 transition border border-white"
+                >
+                  <FontAwesomeIcon icon={faShoppingCart} className="text-black w-5 h-5" />
+                </button>
+              </div>
+            )}
+
             <h2
               className="text-5xl font-bold text-gray-800 mt-4 mb-4"
               style={{ fontFamily: "'Dancing Script', cursive" }}
             >
               Our Food Menu
             </h2>
-            {/* Order Type Selection and Search Bar in one row */}
-            <div className="mt-4 flex flex-col md:flex-row items-center justify-between gap-6 mr-8 ml-8">
-              {/* Order Type Selection */}
-              <div className="flex items-center gap-4 w-full md:w-1/3">
-                <label className="text-xl font-bold whitespace-nowrap">
-                  Order Type:
-                </label>
 
-                {/* Toggle Button for Order Type */}
+            {/* Order type + search */}
+            <div className="mt-4 flex flex-col md:flex-row items-center justify-between gap-6 mr-8 ml-8">
+              <div className="flex items-center gap-4 w-full md:w-1/3">
+                <label className="text-xl font-bold whitespace-nowrap">Order Type:</label>
                 <div className="relative w-40">
                   <div className="relative flex items-center bg-gray-400 rounded-full p-1 cursor-pointer overflow-hidden">
-                    {/* Sliding background indicator */}
                     {orderType && (
                       <div
                         className={`absolute top-1 bottom-1 w-1/2 bg-amber-700 rounded-full transition-all duration-300 ${
@@ -279,8 +266,6 @@ const RestaurantDetails = () => {
                         }`}
                       />
                     )}
-
-                    {/* Dine-in button */}
                     <div
                       className={`w-1/2 text-center py-2 z-10 transition-all duration-300 ${
                         orderType === "Dine-in" ? "text-white" : "text-gray-800"
@@ -289,13 +274,9 @@ const RestaurantDetails = () => {
                     >
                       Dine-in
                     </div>
-
-                    {/* Takeaway button */}
                     <div
                       className={`w-1/2 text-center py-2 z-10 transition-all duration-300 ${
-                        orderType === "Takeaway"
-                          ? "text-white"
-                          : "text-gray-800"
+                        orderType === "Takeaway" ? "text-white" : "text-gray-800"
                       }`}
                       onClick={() => setOrderType("Takeaway")}
                     >
@@ -305,8 +286,6 @@ const RestaurantDetails = () => {
                 </div>
               </div>
 
-              {/* Search Bar */}
-              {/* Search Bar with Clear Button */}
               <div className="relative w-full md:w-1/3 mr-6">
                 <input
                   type="text"
@@ -318,13 +297,15 @@ const RestaurantDetails = () => {
                 {searchQuery && (
                   <span
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 cursor-pointer text-gray-500 hover:text-red-500 text-xl"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-gray-500 hover:text-red-500 text-xl"
                   >
                     ✖
                   </span>
                 )}
               </div>
             </div>
+
+            {/* Category chips */}
             <div className="flex items-center justify-center gap-1 mt-6 font-sans">
               <button
                 onClick={() => setSelectedCategory("All")}
@@ -351,6 +332,8 @@ const RestaurantDetails = () => {
                 </button>
               ))}
             </div>
+
+            {/* Menu grid */}
             <AnimatePresence mode="wait">
               <motion.ul
                 key={selectedCategory}
@@ -363,9 +346,8 @@ const RestaurantDetails = () => {
                 {foods
                   .filter(
                     (food) =>
-                      (selectedCategory === "All" ||
-                        food.category === selectedCategory) &&
-                      food.name
+                      (selectedCategory === "All" || food.category === selectedCategory) &&
+                      (food.name || "")
                         .toLowerCase()
                         .includes(searchQuery.toLowerCase())
                   )
@@ -386,35 +368,29 @@ const RestaurantDetails = () => {
                           className="m-0 rounded-none w-full h-40 transition-transform transform group-hover:scale-105"
                         >
                           <img
-                            src={food.image}
+                            src={food.image || "https://via.placeholder.com/400x250"}
+                            onError={(e) =>
+                              (e.currentTarget.src = "https://via.placeholder.com/400x250")
+                            }
                             alt={food.name}
                             className="h-full w-full object-cover rounded-bl-[20%]"
                           />
                         </CardHeader>
 
                         <CardBody>
-                          <Typography
-                            variant="h4"
-                            color="white"
-                            className="mt-3 font-bold"
-                          >
+                          <Typography variant="h4" color="white" className="mt-3 font-bold">
                             {food.name}
                           </Typography>
-                          <Typography
-                            variant="h6"
-                            color="white"
-                            className="mt-3 font-normal"
-                          >
+                          <Typography variant="h6" color="white" className="mt-3 font-normal">
                             {food.description}
                           </Typography>
 
-                          {/* Portion Size Selector */}
+                          {/* Portion sizes */}
                           <div className="mt-4">
                             <label className="text-white text-sm font-semibold">
                               Portion Size:
                             </label>
                             <div className="flex gap-2 mt-1">
-                              {/* Medium Button */}
                               <button
                                 onClick={() =>
                                   setSelectedPortionSizes((prev) => ({
@@ -431,8 +407,6 @@ const RestaurantDetails = () => {
                               >
                                 M
                               </button>
-
-                              {/* Large Button */}
                               <button
                                 onClick={() =>
                                   setSelectedPortionSizes((prev) => ({
@@ -458,13 +432,14 @@ const RestaurantDetails = () => {
                             <span>
                               {(
                                 (selectedPortionSizes[food._id] === "Large"
-                                  ? food.price * 1.5
-                                  : food.price) || 0
-                              ).toFixed(2)}
+                                  ? (parseFloat(food.price) || 0) * 1.5
+                                  : parseFloat(food.price) || 0
+                                ).toFixed(2)
+                              )}
                             </span>
                           </div>
 
-                          {food.availability !== "Available" ? (
+                          {food.availability && food.availability !== "Available" ? (
                             <div className="flex items-center gap-1 text-red-400 font-semibold p-3">
                               <span>❌</span>
                               <span>Unavailable</span>
@@ -473,13 +448,9 @@ const RestaurantDetails = () => {
                             <Button
                               onClick={() => handleAddToCart(food)}
                               ripple={false}
-                              fullWidth={false}
-                              className="bg-amber-700 text-white shadow-none hover:scale-105 hover:shadow-none focus:scale-105 focus:shadow-none active:scale-100 rounded-full w-12 h-12 flex items-center justify-center"
+                              className="bg-amber-700 text-white shadow-none hover:scale-105 focus:scale-105 active:scale-100 rounded-full w-12 h-12 flex items-center justify-center"
                             >
-                              <FontAwesomeIcon
-                                icon={faShoppingCart}
-                                className="w-5 h-5 text-white"
-                              />
+                              <FontAwesomeIcon icon={faShoppingCart} className="w-5 h-5 text-white" />
                             </Button>
                           )}
                         </CardFooter>
@@ -488,7 +459,6 @@ const RestaurantDetails = () => {
                   ))}
               </motion.ul>
             </AnimatePresence>
-            ``
           </div>
         </div>
 
@@ -500,16 +470,8 @@ const RestaurantDetails = () => {
           orderType={orderType}
           reservationId={reservationId}
         />
-        {/* ✅ Toast notifications container */}
-        <ToastContainer
-          position="top-right"
-          autoClose={3000}
-          hideProgressBar={false}
-          newestOnTop
-          closeOnClick
-          draggable
-          pauseOnHover
-        />
+
+        <ToastContainer position="top-right" autoClose={3000} newestOnTop pauseOnHover />
       </div>
     </>
   );
