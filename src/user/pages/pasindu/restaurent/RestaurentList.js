@@ -8,6 +8,9 @@ import {
   Typography,
   Avatar,
 } from "@material-tailwind/react";
+import app from "../../../../App";
+
+const res = await api.get("/api/ITPM/restaurants");
 
 const RestaurantsList = () => {
   const [restaurants, setRestaurants] = useState([]);

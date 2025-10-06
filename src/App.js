@@ -8,11 +8,11 @@ import {
 import { useLoading } from "./Context/LoadingContext"; // Import Loading Context
 import LoadingScreen from "./Components/LoadingScreen"; // ✅ Fixed import path
 import Layout from "./user/components/Layout"; // ✅ Correct path
+import axios from "axios";
 
 // Pasindu Order
 import HomePage from "./user/pages/pasindu/HomePage";
 import AddOrderForm from "./user/pages/pasindu/order/CreateOrder";
-// import OrdersList from "./user/pages/pasindu/order/OrderList";
 import UpdateOrderForm from "./user/pages/pasindu/order/UpdateOrder";
 import ViewMyOrdersPage from "./user/pages/pasindu/order/OrderList"; // ✅ Ensure correct file
 import OrderDetailsPage from "./user/pages/pasindu/order/OrderDetailsPage"; // ✅ Fixed path
@@ -65,6 +65,11 @@ import CompletedPaymentsPage from "./manager/pages/Isuri/payment/viewcompletedpa
 import MyPayments from "./user/pages/Isuri/payment/mypayments";
 import PaymentReport from "./manager/pages/Isuri/payment/PaymentReport";
 
+
+const api = axios.create({
+  baseURL: process.env.REACT_APP_API_URL,
+  // withCredentials: true, // only if you use cookies
+});
 
 const AppContent = () => {
   const location = useLocation();
