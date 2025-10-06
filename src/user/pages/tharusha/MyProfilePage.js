@@ -4,7 +4,7 @@ import {
   Typography, Button, Input, Spinner, Dialog, DialogHeader, DialogBody, DialogFooter,
 } from "@material-tailwind/react";
 import { useNavigate } from "react-router-dom";
-import api from "../../../api"; // <-- use your configured axios instance (update the path if needed)
+import api from "../../../api";
 
 const MyProfilePage = () => {
   const [user, setUser] = useState(null);
@@ -51,7 +51,7 @@ const MyProfilePage = () => {
           return;
         }
 
-        // 🔐 hits /me with Authorization header via api interceptor
+        // hits /me with Authorization header via api interceptor
         const res = await api.get("/api/ITPM/users/me", { timeout: 12000 });
         const me = res.data;
 
@@ -79,8 +79,7 @@ const MyProfilePage = () => {
     };
 
     fetchProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // ← removed the rule-specific disable comment
 
   const handleChange = (e) => {
     const { name, value } = e.target;
