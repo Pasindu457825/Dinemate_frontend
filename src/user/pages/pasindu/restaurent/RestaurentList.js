@@ -8,7 +8,7 @@ import {
   Typography,
   Avatar,
 } from "@material-tailwind/react";
-import app from "../../../../App";
+import api from "../../../../api";
 
 const res = await api.get("/api/ITPM/restaurants");
 
