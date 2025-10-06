@@ -22,30 +22,57 @@ const LoginPage = () => {
     setSuccess("");
 
     try {
-      // Backend expects { email, pwd }
-      const res = await api.post("/api/ITPM/users/login", formData, { timeout: 12000 });
+      // ✅ Backend expects { email, pwd } (NOT "password")
+      const payload = { email: formData.email, pwd: formData.pwd };
+
+      const res = await api.post("/api/ITPM/users/login", payload, {
+        timeout: 12000,
+      });
       const data = res?.data || {};
 
-      const token  = data.token ?? data.accessToken ?? data.jwt;
-      const role   = String(data.role ?? data.user?.role ?? "").toLowerCase();
-      const userId = data.userId ?? data.user?._id ?? data.user?.id;
-
+      // token from common fields
+      const token = data.token ?? data.accessToken ?? data.jwt;
       if (!token) throw new Error("No token returned from server");
 
+      // role from response or from JWT payload
+      const roleFromApi =
+        data.role ??
+        data.user?.role ??
+        data.data?.user?.role ??
+        data.data?.role;
+
+      let role = roleFromApi ? String(roleFromApi).toLowerCase() : "";
+
+      if (!role) {
+        // Fallback: decode JWT payload to find role
+        try {
+          const base64 = token.split(".")[1];
+          const json = JSON.parse(decodeURIComponent(escape(atob(base64))));
+          role = String(json.role || json.userRole || "").toLowerCase();
+        } catch {}
+      }
+
+      const userId =
+        data.userId ?? data.user?._id ?? data.user?.id ?? data.data?.user?._id;
+
+      // persist
       localStorage.setItem("token", token);
-      if (role)   localStorage.setItem("role", role);
+      if (role) localStorage.setItem("role", role);
       if (userId) localStorage.setItem("userId", userId);
 
       setSuccess("Login successful — redirecting…");
 
-      // Redirect by role
+      // ✅ Redirect by role (return to stop further execution)
       if (role === "admin") {
         navigate("/admindashboard", { replace: true });
-      } else if (role === "restaurant_manager" || role === "manager") {
-        navigate("/managers", { replace: true });
-      } else {
-        navigate("/", { replace: true }); // regular user
+        return;
       }
+      if (role === "restaurant_manager" || role === "manager") {
+        navigate("/managers", { replace: true });
+        return;
+      }
+      navigate("/", { replace: true });
+      return;
     } catch (err) {
       console.error("Login error:", {
         message: err.message,
@@ -53,8 +80,11 @@ const LoginPage = () => {
         data: err.response?.data,
         url: (err.config?.baseURL || "") + (err.config?.url || ""),
       });
+
+      // surface real backend message when available
+      const apiMsg = err.response?.data?.message || err.response?.data?.error;
       setError(
-        err.response?.data?.message ||
+        apiMsg ||
           (err.code === "ECONNABORTED"
             ? "Request timed out. Please try again."
             : "Invalid email or password. Please try again.")
@@ -69,16 +99,24 @@ const LoginPage = () => {
       <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-lg">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-800">Welcome Back</h1>
-          <p className="mt-2 text-gray-600">Sign in to your restaurant account</p>
+          <p className="mt-2 text-gray-600">
+            Sign in to your restaurant account
+          </p>
         </div>
 
         {error && (
-          <div id="error-banner" className="p-3 text-sm text-red-700 bg-red-100 rounded-md">
+          <div
+            id="error-banner"
+            className="p-3 text-sm text-red-700 bg-red-100 rounded-md"
+          >
             {error}
           </div>
         )}
         {success && (
-          <div id="success-banner" className="p-3 text-sm text-green-800 bg-green-100 rounded-md">
+          <div
+            id="success-banner"
+            className="p-3 text-sm text-green-800 bg-green-100 rounded-md"
+          >
             {success}
           </div>
         )}
@@ -86,7 +124,10 @@ const LoginPage = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Email Address
               </label>
               <input
@@ -103,16 +144,22 @@ const LoginPage = () => {
 
             <div>
               <div className="flex items-center justify-between">
-                <label htmlFor="pwd" className="block text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="pwd"
+                  className="block text-sm font-medium text-gray-700"
+                >
                   Password
                 </label>
-                <a href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
+                <a
+                  href="/forgot-password"
+                  className="text-sm text-blue-600 hover:text-blue-800"
+                >
                   Forgot password?
                 </a>
               </div>
               <input
                 id="pwd"
-                name="pwd"               // ✅ matches backend (pwd)
+                name="pwd" // ✅ matches backend (pwd)
                 type="password"
                 required
                 value={formData.pwd}
@@ -133,7 +180,15 @@ const LoginPage = () => {
             {isLoading ? (
               <span className="flex items-center">
                 <svg className="w-5 h-5 mr-3 animate-spin" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
                   <path
                     className="opacity-75"
                     fill="currentColor"
@@ -151,7 +206,10 @@ const LoginPage = () => {
         <div className="text-center mt-4">
           <p className="text-sm text-gray-600">
             Don't have an account?{" "}
-            <a href="/signup/user" className="text-blue-600 hover:text-blue-800">
+            <a
+              href="/signup/user"
+              className="text-blue-600 hover:text-blue-800"
+            >
               Create an account
             </a>
           </p>
