@@ -1,9 +1,10 @@
+// src/pages/auth/LoginPage.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../../../api"; // <-- adjust the relative path to your src/api.js
+import api from "../../../api"; // <-- your configured axios instance (baseURL + token header)
 
 const LoginPage = () => {
-  const [formData, setFormData] = useState({ email: "", password: "" }); // use "password" unless your API needs "pwd"
+  const [formData, setFormData] = useState({ email: "", pwd: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -21,47 +22,42 @@ const LoginPage = () => {
     setSuccess("");
 
     try {
-      const payload = { email: formData.email, pwd: formData.password };
-      console.log("➡️ Sending login payload:", payload); // DEBUG
-
-      const res = await api.post("/api/ITPM/users/login", payload);
-      console.log("✅ Response from backend:", res); // DEBUG
-
+      // Backend expects { email, pwd }
+      const res = await api.post("/api/ITPM/users/login", formData, { timeout: 12000 });
       const data = res?.data || {};
-      console.log("📦 Parsed data:", data); // DEBUG
 
-      const token = data.token ?? data.accessToken ?? data.jwt;
-      const roleRaw =
-        data.role ??
-        data.user?.role ??
-        data.user?.userRole ??
-        data.data?.user?.role ??
-        data.data?.role;
-      const userId =
-        data.userId ?? data.user?.id ?? data.user?._id ?? data.data?.user?._id;
+      const token  = data.token ?? data.accessToken ?? data.jwt;
+      const role   = String(data.role ?? data.user?.role ?? "").toLowerCase();
+      const userId = data.userId ?? data.user?._id ?? data.user?.id;
 
       if (!token) throw new Error("No token returned from server");
+
       localStorage.setItem("token", token);
-      if (roleRaw) localStorage.setItem("role", roleRaw);
+      if (role)   localStorage.setItem("role", role);
       if (userId) localStorage.setItem("userId", userId);
 
-      const role = String(roleRaw || "").toLowerCase();
-      console.log("👤 Detected role:", role);
-
-      if (role === "restaurant_manager" || role === "manager") {
-        navigate("/managers", { replace: true });
-      } else if (role === "admin") {
-        navigate("/admindashboard", { replace: true });
-      } else {
-        navigate("/", { replace: true });
-      }
-
       setSuccess("Login successful — redirecting…");
+
+      // Redirect by role
+      if (role === "admin") {
+        navigate("/admindashboard", { replace: true });
+      } else if (role === "restaurant_manager" || role === "manager") {
+        navigate("/managers", { replace: true });
+      } else {
+        navigate("/", { replace: true }); // regular user
+      }
     } catch (err) {
-      console.error("❌ Login error:", err);
+      console.error("Login error:", {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+        url: (err.config?.baseURL || "") + (err.config?.url || ""),
+      });
       setError(
         err.response?.data?.message ||
-          "Invalid email or password. Please try again."
+          (err.code === "ECONNABORTED"
+            ? "Request timed out. Please try again."
+            : "Invalid email or password. Please try again.")
       );
     } finally {
       setIsLoading(false);
@@ -73,24 +69,16 @@ const LoginPage = () => {
       <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-lg">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-800">Welcome Back</h1>
-          <p className="mt-2 text-gray-600">
-            Sign in to your restaurant account
-          </p>
+          <p className="mt-2 text-gray-600">Sign in to your restaurant account</p>
         </div>
 
         {error && (
-          <div
-            id="error-banner"
-            className="p-3 text-sm text-red-700 bg-red-100 rounded-md"
-          >
+          <div id="error-banner" className="p-3 text-sm text-red-700 bg-red-100 rounded-md">
             {error}
           </div>
         )}
         {success && (
-          <div
-            id="success-banner"
-            className="p-3 text-sm text-green-800 bg-green-100 rounded-md"
-          >
+          <div id="success-banner" className="p-3 text-sm text-green-800 bg-green-100 rounded-md">
             {success}
           </div>
         )}
@@ -98,10 +86,7 @@ const LoginPage = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email Address
               </label>
               <input
@@ -118,25 +103,19 @@ const LoginPage = () => {
 
             <div>
               <div className="flex items-center justify-between">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700"
-                >
+                <label htmlFor="pwd" className="block text-sm font-medium text-gray-700">
                   Password
                 </label>
-                <a
-                  href="/forgot-password"
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
+                <a href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-800">
                   Forgot password?
                 </a>
               </div>
               <input
-                id="password"
-                name="password" // change to "pwd" only if your API requires it
+                id="pwd"
+                name="pwd"               // ✅ matches backend (pwd)
                 type="password"
                 required
-                value={formData.password}
+                value={formData.pwd}
                 onChange={handleChange}
                 className="mt-1 w-full px-4 py-3 text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
                 placeholder="••••••••"
@@ -154,15 +133,7 @@ const LoginPage = () => {
             {isLoading ? (
               <span className="flex items-center">
                 <svg className="w-5 h-5 mr-3 animate-spin" viewBox="0 0 24 24">
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                    fill="none"
-                  />
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path
                     className="opacity-75"
                     fill="currentColor"
@@ -180,10 +151,7 @@ const LoginPage = () => {
         <div className="text-center mt-4">
           <p className="text-sm text-gray-600">
             Don't have an account?{" "}
-            <a
-              href="/signup/user"
-              className="text-blue-600 hover:text-blue-800"
-            >
+            <a href="/signup/user" className="text-blue-600 hover:text-blue-800">
               Create an account
             </a>
           </p>
